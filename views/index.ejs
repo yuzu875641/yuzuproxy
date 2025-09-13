@@ -3,16 +3,24 @@
 <head>
   <title>動的プロキシ</title>
   <style>
-    body { font-family: sans-serif; text-align: center; padding-top: 50px; }
+    body { font-family: sans-serif; text-align: center; padding: 0; margin: 0; }
+    #form-container { padding-top: 20px; padding-bottom: 20px; }
     input[type="text"] { width: 500px; padding: 10px; }
     button { padding: 10px 20px; }
+    iframe { width: 100%; height: calc(100vh - 80px); border: none; }
   </style>
 </head>
 <body>
-  <h1>動的プロキシ</h1>
-  <form action="/proxy" method="post">
-    <input type="text" name="url" placeholder="プロキシしたいURLを入力してください" required>
-    <button type="submit">プロキシ</button>
-  </form>
+  <div id="form-container">
+    <h1>動的プロキシ</h1>
+    <form action="/proxy" method="post">
+      <input type="text" name="url" placeholder="プロキシしたいURLを入力してください" required>
+      <button type="submit">プロキシ</button>
+    </form>
+  </div>
+
+  <% if (url) { %>
+    <iframe src="/proxy/<%= encodeURIComponent(url) %>"></iframe>
+  <% } %>
 </body>
 </html>
