@@ -3,34 +3,39 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const path = require('path');
 const app = express();
 
+// View engine setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 
+// Root route to show the URL input form
 app.get('/', (req, res) => {
-  res.render('index');
+  // 初回アクセス時はurlを空としてテンプレートをレンダリング
+  res.render('index', { url: null });
 });
 
+// Post route to handle the URL submission and render the page with iframe
 app.post('/proxy', (req, res) => {
   const targetUrl = req.body.url;
   if (!targetUrl) {
     return res.status(400).send('URLが入力されていません。');
   }
-  // URLをエンコードして安全にリダイレクト
-  res.redirect(`/proxy/${encodeURIComponent(targetUrl)}`);
+  // URLをテンプレートに渡し、iframeで表示させる
+  res.render('index', { url: targetUrl });
 });
 
-// プロキシリクエストを処理する動的ルート
+// Dynamic proxy route to handle all proxied requests
 app.use('/proxy/:targetUrl*', (req, res, next) => {
   const targetUrl = decodeURIComponent(req.params.targetUrl);
+  
   const proxy = createProxyMiddleware({
     target: targetUrl,
     changeOrigin: true,
-    selfHandleResponse: true, // レスポンスを自分で処理
+    selfHandleResponse: true,
     onProxyRes: (proxyRes, req, res) => {
       const contentType = proxyRes.headers['content-type'];
-
-      // HTMLコンテンツのみを書き換え
+      
+      // Rewrite HTML content
       if (contentType && contentType.includes('text/html')) {
         let body = [];
         proxyRes.on('data', (chunk) => {
@@ -39,17 +44,13 @@ app.use('/proxy/:targetUrl*', (req, res, next) => {
         proxyRes.on('end', () => {
           body = Buffer.concat(body).toString();
           
-          // すべての相対パスをプロキシURLに書き換え
-          // src="/..." -> src="/proxy/original-url/..."
-          // href="/..." -> href="/proxy/original-url/..."
           const modifiedBody = body.replace(/(href|src|action)=["'](\/(?!\/))/g, `$1="/proxy/${encodeURIComponent(targetUrl)}/`);
           
-          // レスポンスヘッダーを修正してクライアントに送信
           res.setHeader('content-length', Buffer.byteLength(modifiedBody));
           res.end(modifiedBody);
         });
       } else {
-        // HTML以外のコンテンツ（CSS, JS, 画像など）はそのままパイプ
+        // Pipe other content types directly
         proxyRes.pipe(res);
       }
     },
@@ -59,7 +60,6 @@ app.use('/proxy/:targetUrl*', (req, res, next) => {
     }
   });
   
-  // プロキシリクエストを送信
   proxy(req, res, next);
 });
 
