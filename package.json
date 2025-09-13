@@ -1,17 +1,14 @@
 {
-  "name": "your-project-name",
+  "name": "dynamic-proxy-app",
   "version": "1.0.0",
-  "description": "",
+  "description": "A dynamic proxy server using Express and Vercel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "express": "^4.17.1",
     "ejs": "^3.1.6",
+    "express": "^4.17.1",
     "http-proxy-middleware": "^2.0.1"
   }
 }
