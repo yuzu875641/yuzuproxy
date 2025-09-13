@@ -8,7 +8,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
-  res.render('index', { url: null });
+  res.render('index');
 });
 
 app.post('/proxy', (req, res) => {
@@ -16,21 +16,21 @@ app.post('/proxy', (req, res) => {
   if (!targetUrl) {
     return res.status(400).send('URLが入力されていません。');
   }
+  // URLをエンコードして安全にリダイレクト
+  res.redirect(`/proxy/${encodeURIComponent(targetUrl)}`);
+});
 
-  // プロキシミドルウェアを動的に作成
-  const proxyMiddleware = createProxyMiddleware({
+// プロキシリクエストを処理する動的ルート
+app.use('/proxy/:targetUrl*', (req, res, next) => {
+  const targetUrl = decodeURIComponent(req.params.targetUrl);
+  const proxy = createProxyMiddleware({
     target: targetUrl,
     changeOrigin: true,
     selfHandleResponse: true, // レスポンスを自分で処理
-    onProxyReq: (proxyReq, req, res) => {
-      // ユーザーのURL入力フォームへのPOSTリクエストを無視
-      if (req.method === 'POST' && req.originalUrl === '/proxy') {
-        proxyReq.destroy();
-      }
-    },
     onProxyRes: (proxyRes, req, res) => {
-      // レスポンスのコンテンツタイプをチェック
       const contentType = proxyRes.headers['content-type'];
+
+      // HTMLコンテンツのみを書き換え
       if (contentType && contentType.includes('text/html')) {
         let body = [];
         proxyRes.on('data', (chunk) => {
@@ -38,26 +38,29 @@ app.post('/proxy', (req, res) => {
         });
         proxyRes.on('end', () => {
           body = Buffer.concat(body).toString();
-          // ここでHTMLの書き換えを行う
-          const modifiedBody = body.replace(/href="\//g, `href="/proxy/${targetUrl.replace(/\/$/, '')}/"`)
-                                    .replace(/src="\//g, `src="/proxy/${targetUrl.replace(/\/$/, '')}/"`);
+          
+          // すべての相対パスをプロキシURLに書き換え
+          // src="/..." -> src="/proxy/original-url/..."
+          // href="/..." -> href="/proxy/original-url/..."
+          const modifiedBody = body.replace(/(href|src|action)=["'](\/(?!\/))/g, `$1="/proxy/${encodeURIComponent(targetUrl)}/`);
+          
+          // レスポンスヘッダーを修正してクライアントに送信
           res.setHeader('content-length', Buffer.byteLength(modifiedBody));
           res.end(modifiedBody);
         });
       } else {
-        // HTML以外のコンテンツはそのまま送信
+        // HTML以外のコンテンツ（CSS, JS, 画像など）はそのままパイプ
         proxyRes.pipe(res);
       }
+    },
+    onError: (err, req, res) => {
+      console.error('Proxy Error:', err);
+      res.status(500).send('プロキシエラーが発生しました。');
     }
   });
-
-  // URLに基づいて動的なルートを設定
-  app.use('/proxy/:url*', (req, res, next) => {
-    proxyMiddleware(req, res, next);
-  });
-
-  // プロキシしたページを表示
-  res.redirect(`/proxy/${targetUrl}`);
+  
+  // プロキシリクエストを送信
+  proxy(req, res, next);
 });
 
 const PORT = process.env.PORT || 3000;
